@@ -1,0 +1,152 @@
+<HTML>
+<!--Choose_OS_Disk.hta                                                              -->
+<!--Author: Jeroen Bakker                                                           -->
+<!--Version: 2.0 																	-->
+<!--																				-->
+<!--Function: Choose a disk for OS installation if multiple fixed disks are present -->
+<!--																				-->
+<!--Lists all fixed disk with indexnr model and size 								-->
+<!--Selection of disk to use from listbox											-->
+<!--																				-->
+<!--Sets the "OSDDiskIndex" task sequence variable which will be used by the Partition and Format Disk TS step-->
+<!--																				-->
+<!--Version history																	-->
+<!-----------------																	-->
+<!--Version 1.0: 14-12-2016: Initial production version								-->
+<!--Version 2.0: 16-04-2024: Generalized script for reuse and distribution			-->
+<head>
+<title>Choose OS Disk</title>
+
+<HTA:APPLICATION 
+     APPLICATIONNAME="Choose OS Disk"
+	 Border="thin"
+	 MAXIMIZEBUTTON="no"
+     MINIMIZEBUTTON="no"
+     SCROLL="yes"
+     SINGLEINSTANCE="yes"
+     WINDOWSTATE="normal"
+>
+
+</head>
+
+<SCRIPT LANGUAGE="VBScript">
+
+'=============================================================================================================================
+'Name: Window_OnLoad
+'Use:  Run functions to build HTML page and to integrate in SCCM OSD Task Sequence
+'Runtime: Runs on HTA load
+'=============================================================================================================================
+Sub Window_OnLoad()
+	
+	' Set Window size
+	Resize_Window()
+	
+	
+	' Set TSProgressUI Object to integrate with OSD task sequence
+	Set objTSProgressUI = CreateObject("Microsoft.SMS.TSProgressUI")
+	objTSProgressUI.CloseProgressDialog()	
+	
+	' Get fixed disk information
+	Get_Disks()
+	
+End Sub
+
+'=============================================================================================================================
+'Name: Resize_Window
+'Use:  Resize the Window and center it on the screen
+'=============================================================================================================================
+Sub Resize_Window
+	' Set Window Size and Location
+	Window.resizeTo 500,350
+	Window.moveTo (screen.width - document.body.clientwidth)/2, (screen.height - document.body.clientheight)/2
+End Sub
+
+'=============================================================================================================================
+'Name: Get_Disks
+'Use:  Get Fixed disk information and create html table with disk info and listbox
+'=============================================================================================================================
+Sub Get_Disks
+
+	'Connect to WMI)
+	strComputer = "."
+	Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
+	
+	'Get fixed disks from WMI
+	Set ColDisks = 	objWMIService.ExecQuery ("select Index, Model, Size from Win32_DiskDrive Where MediaType = 'Fixed hard disk Media'")
+
+	'Create table to display disk information
+	strHTML = "<table border='1' style='border-collapse: collapse' " & "bordercolor='#111111' width='100%' id='Table1' >"
+	strHTML = strHTML & "<tr><th Colspan='3' width='100%'>vailable disks:</th></tr>"
+	strHTML = strHTML & "<tr><th width='15%'>Index</th><th width='60%'>Model</th><th width='25%'>Size (GB)</th>"
+	
+	'Create listbox for choosing the disk. Default option is blank"
+	strListBox = "<select size=""1"" name=""ChooseDisk"">"
+	strListBox = strListBox & "<option value=""-1""></option>"
+	
+	'Get info for each disk
+	For Each objDisk in Coldisks
+		
+		'Create table row for each disk
+		strHTML = strHTML & "<tr>"
+		strHTML = strHTML & "<td width='15%'>" & objDisk.Index & "</td>"
+		strHTML = strHTML & "<td width='60%'>" & objDisk.model & "</td>"
+		strHTML = strHTML & "<td width='25%'>" & round(objDisk.Size/1073741824) & "</td>"
+		
+		'Create listbox entry for each disk
+		strListBox = strListBox & "<option value=""" & objDisk.Index & """>Disk " & objDisk.Index & "</option>"
+		
+	Next
+
+	' Finish table
+	strHTML = strHTML & "</table>"
+	
+	' Finish listbox
+	strListBox = strListBox & "</select>"
+	
+	'Insert Listbox and table into html body
+	ChooserArea.InnerHTML = strListBox
+	DataArea.InnerHTML = strHTML
+
+End Sub
+
+'=============================================================================================================================
+'Name: SetOSDisk
+'Use:  Set OSD Taks Sequence Variable and close Window
+'Runtime: On button click
+'=============================================================================================================================
+Sub SetOSDisk
+	If (ChooseDisk.value = "-1") Then
+		' Blank default listbox value is selected
+		Msgbox "Invalid option!"
+	Else	
+		' Set TSEnvironment Object
+		Set objTSEnvironment = CreateObject("Microsoft.SMS.TSEnvironment")
+		objTSEnvironment("OSDDiskIndex") = ChooseDisk.value
+		
+		' Close Window
+		Window.Close()
+	End If
+
+End Sub
+</SCRIPT>
+
+<BODY>
+
+
+<!--insert Disk Information table in body                                                     -->
+<span id = "DataArea"></span>
+
+<br>
+
+<!--Create table with controls                                                                -->
+<Table Border='0' WIDTH='100%' ID='ButtonTable'>
+<TR><TH Colspan='4' Align='Left'>Disk for Windows installation:</TH></TR>
+
+<!--insert listbox						                                                      -->
+<TR><TD Colspan='4' Align='Left'><span id = "ChooserArea"></span></TD></TR>
+<TR><TD Colspan='4' Align='Left'>Warning! All data will be erased.</TD></TR>
+<TR HEIGHT='10'><TD Colspan='4'></TD></TR>
+<TR HEIGHT='30'><TD COLSPAN='2'></TD><TD COLSPAN='2' ALIGN='Right'><BUTTON STYLE="width:200;height:25" INPUT ID='OKButton' NAME="OKButton" onClick="SetOSDisk">Ok</BUTTON></TD></TR>
+</TABLE>
+</BODY>
+</HTML>
